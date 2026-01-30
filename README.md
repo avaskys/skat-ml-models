@@ -231,7 +231,7 @@ pickup_probs, hand_probs = model(hand_cards, position)
 
 ### In Java (via ONNX Runtime)
 
-See the [jskat](https://github.com/avaskys/jskat) repository for Java inference examples.
+Use ONNX Runtime to load the exported models for inference.
 
 ## License
 
