@@ -1,6 +1,6 @@
 {
-  "version": "1.0.0",
-  "base_url": "https://github.com/avaskys/skat-ml-models/releases/download/v1.0.0",
+  "version": "1.2.0",
+  "base_url": "https://github.com/avaskys/skat-ml-models/releases/download/v1.2.0",
   "models": {
     "bidding": {
       "description": "Bidding phase models - evaluate win probability at each bid level",
@@ -9,8 +9,8 @@
           "files": [
             {
               "name": "bidding_dense.onnx",
-              "sha256": "db3a441a49c3e75e34b60f4531b6172b5ef7d8dddbb5fdd0e5c125ea299e1d71",
-              "size_bytes": 47790
+              "sha256": "961b7c716fc7426ad63b70bf52dd417add0d56e40c53998d5ab81db802bb8075",
+              "size_bytes": 7730
             },
             {
               "name": "bidding_dense.onnx.data",
@@ -23,13 +23,13 @@
           "files": [
             {
               "name": "bidding_transformer.onnx",
-              "sha256": "ce14430f14e4f6ba43dd23023b08d787e4293223d3f89f108b5efc7c5edfad2d",
-              "size_bytes": 22369
+              "sha256": "80e6017eeb6e3994c9a2763ea921ab680232731e2f5e53a4b16a92ef1b7e896d",
+              "size_bytes": 36612
             },
             {
               "name": "bidding_transformer.onnx.data",
-              "sha256": "ba52056453758026a62fddd71909d08a67e19ab42130171a053ac63840890181",
-              "size_bytes": 1933312
+              "sha256": "e2a2566d154588ef0319adeaab465bbe5c7a88afb6084b135eb07323aeed716e",
+              "size_bytes": 13854720
             }
           ]
         }
@@ -42,8 +42,8 @@
           "files": [
             {
               "name": "game_eval_dense.onnx",
-              "sha256": "deb0bc079506494354dbfeff928e69441ee3ae2fab187e8a80b44e7b9a0ac544",
-              "size_bytes": 41678
+              "sha256": "f19e7ca2e1f7331bee9759d42230f5b1715cc59c8508e723b8a11ba0cea15322",
+              "size_bytes": 6388
             },
             {
               "name": "game_eval_dense.onnx.data",
@@ -56,8 +56,13 @@
           "files": [
             {
               "name": "game_eval_transformer.onnx",
-              "sha256": "d571e6636b15949d4ec16531772d50472f3d1aca11bc6bae35f27c47cab58943",
-              "size_bytes": 13095629
+              "sha256": "0a003c0f817d7a39dba093a01745dcfb92aa96f2506f523790b97d2ac22b07fb",
+              "size_bytes": 40774
+            },
+            {
+              "name": "game_eval_transformer.onnx.data",
+              "sha256": "cdffb129df545a2341e36da0cc48c015c8d6fbf4c93cd05d6aa1688dc9950e05",
+              "size_bytes": 12954624
             }
           ]
         }
@@ -66,31 +71,12 @@
     "card_play": {
       "description": "Card play models - select which card to play during tricks",
       "variants": {
-        "dense": {
-          "files": [
-            {
-              "name": "card_play_dense.onnx",
-              "sha256": "df31c25c13f755bbfb02c16995bd934a7b4bfd6109d8925cf58021eaa14c99c7",
-              "size_bytes": 54486
-            },
-            {
-              "name": "card_play_dense.onnx.data",
-              "sha256": "32a10fac63dd2a5c2f52882d4b31e404c879c4ec4522d69f8ea8ed3a328b6246",
-              "size_bytes": 12140544
-            }
-          ]
-        },
         "transformer": {
           "files": [
             {
               "name": "card_play_transformer.onnx",
-              "sha256": "445d0012756e775f090cdbf4bb5b647c0719bddfc82e34be64c1d7b4a6bd011d",
-              "size_bytes": 72147031
-            },
-            {
-              "name": "card_play_transformer.onnx.data",
-              "sha256": "f09ac4f482df90c89499372cdc51fcbfc6ac81dd6ba75ead91aba777db9d041e",
-              "size_bytes": 3314512
+              "sha256": "320403b0060837d2f86e5ef4b350094157e2dbb2d7b98f9961c0b6a708d5ea1e",
+              "size_bytes": 72147032
             }
           ]
         }

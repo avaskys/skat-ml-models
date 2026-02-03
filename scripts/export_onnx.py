@@ -87,7 +87,7 @@ def export_bidding(checkpoint_path: Path, output_dir: Path):
         model.eval()
 
         dummy_input = torch.randn(1, BIDDING_EVALUATOR_INPUT_DIM)
-        onnx_path = output_dir / "bidding_evaluator.onnx"
+        onnx_path = output_dir / "bidding_dense.onnx"
 
         torch.onnx.export(
             model,
@@ -146,7 +146,7 @@ def export_game_eval(checkpoint_path: Path, output_dir: Path):
         model.eval()
 
         dummy_input = torch.randn(1, GAME_EVALUATOR_INPUT_DIM)
-        onnx_path = output_dir / "game_evaluator.onnx"
+        onnx_path = output_dir / "game_eval_dense.onnx"
 
         torch.onnx.export(
             model,
@@ -175,7 +175,7 @@ def export_game_eval(checkpoint_path: Path, output_dir: Path):
         dummy_is_hand = torch.zeros(1, dtype=torch.long)
         dummy_bid = torch.zeros(1, dtype=torch.float32)
 
-        onnx_path = output_dir / "game_evaluator_transformer.onnx"
+        onnx_path = output_dir / "game_eval_transformer.onnx"
 
         torch.onnx.export(
             model,
@@ -217,7 +217,7 @@ def export_card_play(checkpoint_path: Path, output_dir: Path):
 
         from skat_ml.constants import CARD_PLAY_POLICY_INPUT_DIM
         dummy_input = torch.randn(1, CARD_PLAY_POLICY_INPUT_DIM)
-        onnx_path = output_dir / "card_play_policy.onnx"
+        onnx_path = output_dir / "card_play_dense.onnx"
 
         torch.onnx.export(
             model,
