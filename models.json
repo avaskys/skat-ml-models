@@ -1,0 +1,100 @@
+{
+  "version": "1.0.0",
+  "base_url": "https://github.com/avaskys/skat-ml-models/releases/download/v1.0.0",
+  "models": {
+    "bidding": {
+      "description": "Bidding phase models - evaluate win probability at each bid level",
+      "variants": {
+        "dense": {
+          "files": [
+            {
+              "name": "bidding_dense.onnx",
+              "sha256": "db3a441a49c3e75e34b60f4531b6172b5ef7d8dddbb5fdd0e5c125ea299e1d71",
+              "size_bytes": 47790
+            },
+            {
+              "name": "bidding_dense.onnx.data",
+              "sha256": "c7f9a22133ec06d1dd64384a1fa4a20858bb31d5b272ea036d1ce488aa672c6b",
+              "size_bytes": 9068544
+            }
+          ]
+        },
+        "transformer": {
+          "files": [
+            {
+              "name": "bidding_transformer.onnx",
+              "sha256": "ce14430f14e4f6ba43dd23023b08d787e4293223d3f89f108b5efc7c5edfad2d",
+              "size_bytes": 22369
+            },
+            {
+              "name": "bidding_transformer.onnx.data",
+              "sha256": "ba52056453758026a62fddd71909d08a67e19ab42130171a053ac63840890181",
+              "size_bytes": 1933312
+            }
+          ]
+        }
+      }
+    },
+    "game_eval": {
+      "description": "Game evaluation models - evaluate win probability for skat pickup and game type selection",
+      "variants": {
+        "dense": {
+          "files": [
+            {
+              "name": "game_eval_dense.onnx",
+              "sha256": "deb0bc079506494354dbfeff928e69441ee3ae2fab187e8a80b44e7b9a0ac544",
+              "size_bytes": 41678
+            },
+            {
+              "name": "game_eval_dense.onnx.data",
+              "sha256": "19faece5f1f073b8564197354e01320ec6f634b5e63c18b96dd6807a81a8ebd5",
+              "size_bytes": 8823808
+            }
+          ]
+        },
+        "transformer": {
+          "files": [
+            {
+              "name": "game_eval_transformer.onnx",
+              "sha256": "d571e6636b15949d4ec16531772d50472f3d1aca11bc6bae35f27c47cab58943",
+              "size_bytes": 13095629
+            }
+          ]
+        }
+      }
+    },
+    "card_play": {
+      "description": "Card play models - select which card to play during tricks",
+      "variants": {
+        "dense": {
+          "files": [
+            {
+              "name": "card_play_dense.onnx",
+              "sha256": "df31c25c13f755bbfb02c16995bd934a7b4bfd6109d8925cf58021eaa14c99c7",
+              "size_bytes": 54486
+            },
+            {
+              "name": "card_play_dense.onnx.data",
+              "sha256": "32a10fac63dd2a5c2f52882d4b31e404c879c4ec4522d69f8ea8ed3a328b6246",
+              "size_bytes": 12140544
+            }
+          ]
+        },
+        "transformer": {
+          "files": [
+            {
+              "name": "card_play_transformer.onnx",
+              "sha256": "445d0012756e775f090cdbf4bb5b647c0719bddfc82e34be64c1d7b4a6bd011d",
+              "size_bytes": 72147031
+            },
+            {
+              "name": "card_play_transformer.onnx.data",
+              "sha256": "f09ac4f482df90c89499372cdc51fcbfc6ac81dd6ba75ead91aba777db9d041e",
+              "size_bytes": 3314512
+            }
+          ]
+        }
+      }
+    }
+  }
+}

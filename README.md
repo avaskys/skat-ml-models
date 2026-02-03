@@ -2,6 +2,25 @@
 
 Neural network models for playing the German card game Skat, trained on millions of games from the International Skat Server (ISS).
 
+## Downloads
+
+Pre-trained ONNX models are available from the [Releases page](https://github.com/avaskys/skat-ml-models/releases).
+
+| Model | Variant | Description | Size |
+|-------|---------|-------------|------|
+| `bidding_dense` | Dense | Pre-skat bidding evaluation | ~9 MB |
+| `bidding_transformer` | Transformer | Pre-skat bidding with attention | ~2 MB |
+| `game_eval_dense` | Dense | Post-skat game type selection | ~8 MB |
+| `game_eval_transformer` | Transformer | Post-skat evaluation with attention | ~13 MB |
+| `card_play_dense` | Dense | Card play (dense network) | ~12 MB |
+| `card_play_transformer` | Transformer | Card play with attention | ~75 MB |
+
+**Total download size:** ~120 MB
+
+### Model Manifest
+
+The [`models.json`](https://github.com/avaskys/skat-ml-models/releases/download/v1.0.0/models.json) file contains version info, checksums, and download URLs for programmatic access.
+
 ## Model Architecture
 
 ### Gameplay Phases
