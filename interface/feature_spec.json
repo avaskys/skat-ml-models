@@ -1,0 +1,262 @@
+{
+  "version": "1.0.0",
+  "card_encoding": {
+    "description": "Card index mapping for all models",
+    "order": [
+      "CJ", "SJ", "HJ", "DJ",
+      "CA", "CT", "CK", "CQ", "C9", "C8", "C7",
+      "SA", "ST", "SK", "SQ", "S9", "S8", "S7",
+      "HA", "HT", "HK", "HQ", "H9", "H8", "H7",
+      "DA", "DT", "DK", "DQ", "D9", "D8", "D7"
+    ],
+    "pad_index": 32,
+    "num_cards": 32
+  },
+  "game_type_encoding": {
+    "description": "Game type index mapping",
+    "DIAMONDS": 0,
+    "HEARTS": 1,
+    "SPADES": 2,
+    "CLUBS": 3,
+    "GRAND": 4,
+    "NULL": 5
+  },
+  "position_encoding": {
+    "description": "Player position index mapping",
+    "FOREHAND": 0,
+    "MIDDLEHAND": 1,
+    "REARHAND": 2
+  },
+  "bid_values": {
+    "description": "Valid bid values in Skat, indexed 0-62",
+    "values": [
+      18, 20, 22, 23, 24, 27, 30, 33, 35, 36, 40, 44, 45, 46, 48,
+      50, 54, 55, 59, 60, 63, 66, 70, 72, 77, 80, 81, 84, 88, 90,
+      96, 99, 100, 108, 110, 117, 120, 121, 126, 130, 132, 135,
+      140, 143, 144, 150, 153, 154, 156, 160, 162, 165, 168, 170,
+      176, 180, 187, 192, 198, 204, 216, 240, 264
+    ],
+    "num_levels": 63
+  },
+  "models": {
+    "bidding_dense": {
+      "description": "Pre-skat bidding evaluation (MLP). Predicts win probability at each bid level.",
+      "inputs": {
+        "features": {
+          "shape": ["batch", 35],
+          "dtype": "float32",
+          "description": "Concatenated one-hot vectors: 32 cards + 3 position"
+        }
+      },
+      "outputs": {
+        "pickup_probs": {
+          "shape": ["batch", 63],
+          "dtype": "float32",
+          "description": "Win probability at each bid level if picking up skat"
+        },
+        "hand_probs": {
+          "shape": ["batch", 63],
+          "dtype": "float32",
+          "description": "Win probability at each bid level for hand game"
+        }
+      }
+    },
+    "bidding_transformer": {
+      "description": "Pre-skat bidding evaluation (Transformer). Uses attention on card indices.",
+      "inputs": {
+        "hand_cards": {
+          "shape": ["batch", 10],
+          "dtype": "int64",
+          "description": "Card indices (0-31) for the 10 cards in hand"
+        },
+        "position": {
+          "shape": ["batch"],
+          "dtype": "int64",
+          "description": "Player position index (0-2)"
+        }
+      },
+      "outputs": {
+        "pickup_probs": {
+          "shape": ["batch", 63],
+          "dtype": "float32",
+          "description": "Win probability at each bid level if picking up skat"
+        },
+        "hand_probs": {
+          "shape": ["batch", 63],
+          "dtype": "float32",
+          "description": "Win probability at each bid level for hand game"
+        }
+      }
+    },
+    "game_eval_dense": {
+      "description": "Post-skat game evaluation (MLP). Predicts win probability for a game configuration.",
+      "inputs": {
+        "features": {
+          "shape": ["batch", 75],
+          "dtype": "float32",
+          "description": "Concatenated: 32 hand one-hot + 32 skat one-hot + 6 game type one-hot + 3 position one-hot + 1 hand flag + 1 normalized bid"
+        }
+      },
+      "outputs": {
+        "win_prob": {
+          "shape": ["batch"],
+          "dtype": "float32",
+          "description": "Probability of winning the game"
+        }
+      }
+    },
+    "game_eval_transformer": {
+      "description": "Post-skat game evaluation (Transformer). Uses attention on card indices.",
+      "inputs": {
+        "hand_cards": {
+          "shape": ["batch", 10],
+          "dtype": "int64",
+          "description": "Card indices (0-31) for the 10 cards in hand"
+        },
+        "skat_cards": {
+          "shape": ["batch", 2],
+          "dtype": "int64",
+          "description": "Card indices for skat cards, padded with 32"
+        },
+        "skat_len": {
+          "shape": ["batch"],
+          "dtype": "int64",
+          "description": "Actual number of skat cards (0, 1, or 2)"
+        },
+        "game_type": {
+          "shape": ["batch"],
+          "dtype": "int64",
+          "description": "Game type index (0-5)"
+        },
+        "position": {
+          "shape": ["batch"],
+          "dtype": "int64",
+          "description": "Player position index (0-2)"
+        },
+        "is_hand": {
+          "shape": ["batch"],
+          "dtype": "int64",
+          "description": "0 = pickup game, 1 = hand game"
+        },
+        "bid": {
+          "shape": ["batch"],
+          "dtype": "float32",
+          "description": "Normalized bid value (0-1 range, divide by 264)"
+        }
+      },
+      "outputs": {
+        "win_prob": {
+          "shape": ["batch"],
+          "dtype": "float32",
+          "description": "Probability of winning the game"
+        }
+      }
+    },
+    "card_play_dense": {
+      "description": "Card play policy (MLP). Predicts which card to play.",
+      "inputs": {
+        "features": {
+          "shape": ["batch", 268],
+          "dtype": "float32",
+          "description": "Full gameplay context vector (see card_play_dense_features for breakdown)"
+        }
+      },
+      "outputs": {
+        "logits": {
+          "shape": ["batch", 32],
+          "dtype": "float32",
+          "description": "Unnormalized scores for each card. Apply softmax and mask illegal cards."
+        }
+      }
+    },
+    "card_play_transformer": {
+      "description": "Card play policy (Transformer). Uses attention on game history.",
+      "inputs": {
+        "game_type": {
+          "shape": ["batch"],
+          "dtype": "int64",
+          "description": "Game type index (0-5)"
+        },
+        "declarer": {
+          "shape": ["batch"],
+          "dtype": "int64",
+          "description": "Relative declarer position: 0=me, 1=left opponent, 2=right opponent"
+        },
+        "is_ouvert": {
+          "shape": ["batch"],
+          "dtype": "int64",
+          "description": "0 = not ouvert, 1 = ouvert game"
+        },
+        "hand": {
+          "shape": ["batch", 10],
+          "dtype": "int64",
+          "description": "Card indices in hand, padded with 32"
+        },
+        "hand_len": {
+          "shape": ["batch"],
+          "dtype": "int64",
+          "description": "Actual number of cards in hand"
+        },
+        "ouvert_hand": {
+          "shape": ["batch", 10],
+          "dtype": "int64",
+          "description": "Declarer's visible cards in ouvert games, padded with 32"
+        },
+        "ouvert_hand_len": {
+          "shape": ["batch"],
+          "dtype": "int64",
+          "description": "Actual number of visible ouvert cards (0 if not applicable)"
+        },
+        "history": {
+          "shape": ["batch", 27, 2],
+          "dtype": "int64",
+          "description": "Previous moves as [player_index, card_index] pairs, padded"
+        },
+        "history_len": {
+          "shape": ["batch"],
+          "dtype": "int64",
+          "description": "Actual number of history entries"
+        },
+        "trick": {
+          "shape": ["batch", 2, 2],
+          "dtype": "int64",
+          "description": "Current trick as [player_index, card_index] pairs, padded"
+        },
+        "trick_len": {
+          "shape": ["batch"],
+          "dtype": "int64",
+          "description": "Number of cards in current trick (0-2)"
+        },
+        "legal_mask": {
+          "shape": ["batch", 32],
+          "dtype": "bool",
+          "description": "True for cards that are legal to play"
+        }
+      },
+      "outputs": {
+        "logits": {
+          "shape": ["batch", 32],
+          "dtype": "float32",
+          "description": "Scores for each card. Illegal cards are masked to -inf."
+        }
+      }
+    }
+  },
+  "card_play_dense_features": {
+    "description": "Breakdown of the 268-dimensional input vector for card_play_dense",
+    "layout": [
+      {"name": "hand", "start": 0, "end": 32, "description": "One-hot encoded hand (32 cards)"},
+      {"name": "skat", "start": 32, "end": 64, "description": "One-hot encoded skat (32 cards)"},
+      {"name": "history_me", "start": 64, "end": 96, "description": "Cards I have played (32 cards)"},
+      {"name": "history_left", "start": 96, "end": 128, "description": "Cards left opponent has played (32 cards)"},
+      {"name": "history_right", "start": 128, "end": 160, "description": "Cards right opponent has played (32 cards)"},
+      {"name": "trick_card_1", "start": 160, "end": 192, "description": "First card in current trick (32 cards)"},
+      {"name": "trick_card_2", "start": 192, "end": 224, "description": "Second card in current trick (32 cards)"},
+      {"name": "trick_leader", "start": 224, "end": 227, "description": "Who led this trick (3 positions)"},
+      {"name": "trick_len", "start": 227, "end": 229, "description": "Number of cards in trick (one-hot 0/1/2)"},
+      {"name": "game_type", "start": 229, "end": 235, "description": "Game type one-hot (6 types)"},
+      {"name": "is_ouvert", "start": 235, "end": 236, "description": "Is this an ouvert game?"},
+      {"name": "visible_hand", "start": 236, "end": 268, "description": "Declarer's visible hand in ouvert (32 cards)"}
+    ]
+  }
+}

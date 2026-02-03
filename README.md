@@ -21,6 +21,15 @@ Pre-trained ONNX models are available from the [Releases page](https://github.co
 
 The [`models.json`](https://github.com/avaskys/skat-ml-models/releases/download/v1.0.0/models.json) file contains version info, checksums, and download URLs for programmatic access.
 
+### Interface Specification
+
+The `interface/` directory defines the contract for using these models:
+
+- [`feature_spec.json`](https://github.com/avaskys/skat-ml-models/releases/download/v1.1.0/feature_spec.json) - Card encoding, game type encoding, input/output tensor shapes
+- [`test_vectors.json`](https://github.com/avaskys/skat-ml-models/releases/download/v1.1.0/test_vectors.json) - Reference inputs and expected outputs for validation
+
+Use these to ensure your implementation encodes inputs correctly.
+
 ## Model Architecture
 
 ### Gameplay Phases
