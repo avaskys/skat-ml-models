@@ -71,7 +71,7 @@ def train_model(args, defaults: dict = None):
 
     # Setup datasets (after config restore so batch_size is correct)
     train_dataset = StreamingGameEvalDataset(Path(args.sgf), split="train")
-    val_dataset = StreamingGameEvalDataset(Path(args.sgf), split="val")
+    val_dataset = StreamingGameEvalDataset(Path(args.sgf), split="val", shuffle_buffer=0)  # No shuffle needed for val
 
     train_loader = DataLoader(
         train_dataset,
@@ -84,11 +84,11 @@ def train_model(args, defaults: dict = None):
 
     val_loader = DataLoader(
         val_dataset,
-        batch_size=args.batch_size,
-        num_workers=min(args.num_workers, 2),
+        batch_size=args.batch_size * 2,  # Larger batches for val (no gradients)
+        num_workers=args.num_workers,  # Same workers as train (no shuffle buffer to fill)
         pin_memory=True,
         collate_fn=game_eval_collate_fn,
-        prefetch_factor=2 if args.num_workers > 0 else None,
+        prefetch_factor=4 if args.num_workers > 0 else None,
     )
 
     # Initialize model
@@ -123,13 +123,13 @@ def train_model(args, defaults: dict = None):
         scheduler = create_warmup_scheduler(optimizer, warmup_steps=1000)
         scheduler_steps_per_epoch = False
 
-    # Loss function
+    # Loss function (use logits versions for AMP safety)
     if args.focal:
         criterion = BinaryFocalLoss(gamma=args.gamma, reduction="mean")
         print(f"Using BinaryFocalLoss with gamma={args.gamma}")
     else:
-        criterion = nn.BCELoss()
-        print("Using BCELoss")
+        criterion = nn.BCEWithLogitsLoss()
+        print("Using BCEWithLogitsLoss")
 
     # Mixed precision
     use_amp, scaler = setup_mixed_precision(device, args.amp)
@@ -167,7 +167,7 @@ def train_model(args, defaults: dict = None):
     # Resume if checkpoint exists
     if checkpoint:
         start_epoch, best_val_loss, global_step = resume_from_checkpoint(
-            checkpoint, model, optimizer, scheduler, latest_path
+            checkpoint, model, optimizer, scheduler, latest_path, new_lr=args.lr
         )
 
     print(f"\nStarting training for {args.epochs} epochs...")

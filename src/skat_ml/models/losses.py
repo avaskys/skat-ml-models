@@ -56,12 +56,12 @@ class FocalLoss(nn.Module):
 
 class BinaryFocalLoss(nn.Module):
     """
-    Focal Loss for binary classification.
+    Focal Loss for binary classification (AMP-safe, accepts logits).
 
     Downweights easy examples to focus training on hard/rare cases.
     FL(p_t) = -alpha * (1 - p_t)^gamma * log(p_t)
 
-    When gamma=0, this is equivalent to BCELoss.
+    When gamma=0, this is equivalent to BCEWithLogitsLoss.
     Higher gamma (e.g., 2) focuses more on hard examples.
 
     Args:
@@ -76,17 +76,17 @@ class BinaryFocalLoss(nn.Module):
         self.alpha = alpha
         self.reduction = reduction
 
-    def forward(self, probs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+    def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            probs: Predicted probabilities (after sigmoid), shape (N,)
+            logits: Raw logits (before sigmoid), shape (N,)
             targets: Binary targets (0 or 1), shape (N,)
         """
-        # Clamp to avoid log(0)
-        probs = probs.clamp(min=1e-7, max=1 - 1e-7)
+        # Compute BCE with logits (numerically stable, AMP-safe)
+        bce = F.binary_cross_entropy_with_logits(logits, targets, reduction="none")
 
-        # Binary cross-entropy per sample
-        bce = -targets * torch.log(probs) - (1 - targets) * torch.log(1 - probs)
+        # Get probabilities for focal weight calculation
+        probs = torch.sigmoid(logits)
 
         # p_t = p if y=1, else 1-p
         p_t = probs * targets + (1 - probs) * (1 - targets)
@@ -110,26 +110,27 @@ class BinaryFocalLoss(nn.Module):
 
 
 def masked_bce_loss(
-    pred: torch.Tensor, target: torch.Tensor, weight: torch.Tensor = None
+    logits: torch.Tensor, target: torch.Tensor, weight: torch.Tensor = None
 ) -> torch.Tensor:
     """
-    Masked Binary Cross Entropy Loss.
+    Masked Binary Cross Entropy Loss with Logits (AMP-safe).
     Ignores targets with value -1.0.
 
     Args:
-        pred: (batch, num_classes) predictions
+        logits: (batch, num_classes) raw logits (before sigmoid)
         target: (batch, num_classes) targets, -1.0 means ignored
         weight: (batch,) optional sample weights
     """
     mask = target >= 0  # True where not masked
     if mask.sum() == 0:
-        return torch.tensor(0.0, device=pred.device, requires_grad=True)
+        return torch.tensor(0.0, device=logits.device, requires_grad=True)
 
     # Select valid elements
-    pred_masked = pred[mask]
+    logits_masked = logits[mask]
     target_masked = target[mask]
 
-    loss = F.binary_cross_entropy(pred_masked, target_masked, reduction="none")
+    # Use binary_cross_entropy_with_logits (AMP-safe)
+    loss = F.binary_cross_entropy_with_logits(logits_masked, target_masked, reduction="none")
 
     # Apply weights if provided
     if weight is not None:

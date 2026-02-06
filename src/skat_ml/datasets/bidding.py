@@ -59,21 +59,25 @@ class StreamingBiddingDataset(IterableDataset):
             start_pos = 0
             end_pos = float("inf")
 
-        # Stream with shuffle buffer
-        buffer = []
+        # Stream with optional shuffle buffer
+        if self.shuffle_buffer <= 0:
+            # No shuffling - yield directly
+            for sample in self._stream_samples(start_pos, end_pos):
+                yield sample
+        else:
+            buffer = []
+            for sample in self._stream_samples(start_pos, end_pos):
+                if len(buffer) < self.shuffle_buffer:
+                    buffer.append(sample)
+                else:
+                    idx = random.randrange(self.shuffle_buffer)
+                    yield buffer[idx]
+                    buffer[idx] = sample
 
-        for sample in self._stream_samples(start_pos, end_pos):
-            if len(buffer) < self.shuffle_buffer:
-                buffer.append(sample)
-            else:
-                idx = random.randrange(self.shuffle_buffer)
-                yield buffer[idx]
-                buffer[idx] = sample
-
-        # Flush remaining buffer
-        random.shuffle(buffer)
-        for sample in buffer:
-            yield sample
+            # Flush remaining buffer
+            random.shuffle(buffer)
+            for sample in buffer:
+                yield sample
 
     def _stream_samples(
         self, start_pos: int, end_pos: float

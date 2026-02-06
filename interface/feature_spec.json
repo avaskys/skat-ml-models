@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "card_encoding": {
     "description": "Card index mapping for all models",
     "order": [
@@ -230,7 +230,7 @@
         "legal_mask": {
           "shape": ["batch", 32],
           "dtype": "bool",
-          "description": "True for cards that are legal to play"
+          "description": "True for cards that are legal to play, following Skat suit rules: when following, must play led suit (jacks are trump in suit/grand games) if able; otherwise any card in hand is legal"
         }
       },
       "outputs": {

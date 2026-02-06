@@ -23,13 +23,13 @@
           "files": [
             {
               "name": "bidding_transformer.onnx",
-              "sha256": "80e6017eeb6e3994c9a2763ea921ab680232731e2f5e53a4b16a92ef1b7e896d",
-              "size_bytes": 36612
+              "sha256": "acd2334f207118e7901a9fa723585c71727fe356866e32c4a15a5162bd5de945",
+              "size_bytes": 37308
             },
             {
               "name": "bidding_transformer.onnx.data",
-              "sha256": "e2a2566d154588ef0319adeaab465bbe5c7a88afb6084b135eb07323aeed716e",
-              "size_bytes": 13854720
+              "sha256": "b5d90fb43a0b6a481c49b66b17a9aaddd1a64352dd699ade229c68bea6331e38",
+              "size_bytes": 13330432
             }
           ]
         }
@@ -75,8 +75,8 @@
           "files": [
             {
               "name": "card_play_transformer.onnx",
-              "sha256": "320403b0060837d2f86e5ef4b350094157e2dbb2d7b98f9961c0b6a708d5ea1e",
-              "size_bytes": 72147032
+              "sha256": "36cc064799e761549c31ffadee71654f9b7f3c4fc68acb90a827dc2c8090d991",
+              "size_bytes": 73328815
             }
           ]
         }

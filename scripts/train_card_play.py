@@ -63,7 +63,7 @@ def train_model(args, defaults: dict = None):
 
     # Setup datasets (after config restore so batch_size is correct)
     train_dataset = FastCardPlayDataset(Path(args.sgf), winner_only=True, split="train")
-    val_dataset = FastCardPlayDataset(Path(args.sgf), winner_only=True, split="val")
+    val_dataset = FastCardPlayDataset(Path(args.sgf), winner_only=True, split="val", shuffle_buffer=0)  # No shuffle needed for val
 
     train_loader = DataLoader(
         train_dataset,
@@ -94,10 +94,7 @@ def train_model(args, defaults: dict = None):
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Model parameters: {total_params:,}")
 
-    # Optionally compile
-    model = maybe_compile_model(model, args.compile, device)
-
-    # Optimizer and scheduler
+    # Optimizer and scheduler (before compile, so optimizer sees raw params)
     optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
     scheduler = create_warmup_scheduler(optimizer, warmup_steps=1000)
 
@@ -137,34 +134,52 @@ def train_model(args, defaults: dict = None):
     # Resume if checkpoint exists
     if checkpoint:
         start_epoch, best_val_loss, global_step = resume_from_checkpoint(
-            checkpoint, model, optimizer, scheduler, latest_path
+            checkpoint, model, optimizer, scheduler, latest_path, new_lr=args.lr
         )
+
+    # Compile after loading checkpoint (compiled model has different state_dict keys)
+    model = maybe_compile_model(model, args.compile, device)
 
     print(f"\nStarting training for {args.epochs} epochs...")
 
     for epoch in range(start_epoch, args.epochs + 1):
         model.train()
-        train_loss = 0.0
+        train_loss_sum = 0.0
         train_correct = 0
         train_total = 0
+        train_total_all = 0
+        train_correct_all = 0
         steps = 0
 
         pbar = tqdm(train_loader, total=est_batches, desc=f"Epoch {epoch}/{args.epochs} [Train]")
 
         for batch in pbar:
-            game_type = batch["game_type"].to(device)
-            declarer = batch["declarer"].to(device)
-            is_ouvert = batch["is_ouvert"].to(device)
-            hand = batch["hand"].to(device)
-            hand_len = batch["hand_len"].to(device)
-            ouvert_hand = batch["ouvert_hand"].to(device)
-            ouvert_hand_len = batch["ouvert_hand_len"].to(device)
-            history = batch["history"].to(device)
-            history_len = batch["history_len"].to(device)
-            trick = batch["trick"].to(device)
-            trick_len = batch["trick_len"].to(device)
-            legal_mask = batch["legal_mask"].to(device)
-            targets = batch["target"].to(device)
+            num_legal = batch["num_legal"].to(device)
+
+            # Track all samples (forced plays are 100% correct with 0 loss)
+            batch_size = num_legal.size(0)
+            num_forced = (num_legal == 1).sum().item()
+            train_total_all += batch_size
+            train_correct_all += num_forced  # Forced plays always correct
+
+            # Filter to multi-choice samples only (skip forced plays)
+            mask = num_legal > 1
+            if mask.sum() == 0:
+                continue  # Skip batch if all forced plays
+
+            game_type = batch["game_type"].to(device)[mask]
+            declarer = batch["declarer"].to(device)[mask]
+            is_ouvert = batch["is_ouvert"].to(device)[mask]
+            hand = batch["hand"].to(device)[mask]
+            hand_len = batch["hand_len"].to(device)[mask]
+            ouvert_hand = batch["ouvert_hand"].to(device)[mask]
+            ouvert_hand_len = batch["ouvert_hand_len"].to(device)[mask]
+            history = batch["history"].to(device)[mask]
+            history_len = batch["history_len"].to(device)[mask]
+            trick = batch["trick"].to(device)[mask]
+            trick_len = batch["trick_len"].to(device)[mask]
+            legal_mask = batch["legal_mask"].to(device)[mask]
+            targets = batch["target"].to(device)[mask]
 
             optimizer.zero_grad()
 
@@ -193,22 +208,33 @@ def train_model(args, defaults: dict = None):
             scheduler.step()
             global_step += 1
 
-            train_loss += loss.item()
             _, predicted = outputs.max(1)
-            train_total += targets.size(0)
-            train_correct += predicted.eq(targets).sum().item()
+            num_correct = predicted.eq(targets).sum().item()
+            num_filtered = targets.size(0)
+            train_loss_sum += loss.item() * num_filtered  # Sum of losses (criterion uses mean)
+            train_total += num_filtered
+            train_correct += num_correct
+            train_correct_all += num_correct  # Add filtered correct to all
             steps += 1
 
             if steps % 100 == 0:
+                train_loss = train_loss_sum / train_total if train_total > 0 else 0
+                train_loss_all = train_loss_sum / train_total_all if train_total_all > 0 else 0
+                acc = 100.0 * train_correct / train_total if train_total > 0 else 0
+                acc_all = 100.0 * train_correct_all / train_total_all if train_total_all > 0 else 0
                 pbar.set_postfix({
-                    "loss": f"{train_loss/steps:.4f}",
-                    "acc": f"{100.*train_correct/train_total:.2f}%",
+                    "loss": f"{train_loss:.4f}",
+                    "loss_all": f"{train_loss_all:.4f}",
+                    "acc": f"{acc:.2f}%",
+                    "acc_all": f"{acc_all:.2f}%",
                     "lr": f"{scheduler.get_last_lr()[0]:.6f}",
                 })
 
             if steps % 500 == 0:
-                writer.add_scalar("Live/loss", train_loss / steps, global_step)
+                writer.add_scalar("Live/loss", train_loss_sum / train_total, global_step)
+                writer.add_scalar("Live/loss_all", train_loss_sum / train_total_all, global_step)
                 writer.add_scalar("Live/acc", 100.0 * train_correct / train_total, global_step)
+                writer.add_scalar("Live/acc_all", 100.0 * train_correct_all / train_total_all, global_step)
                 writer.add_scalar("Live/lr", scheduler.get_last_lr()[0], global_step)
 
             if args.max_steps > 0 and steps >= args.max_steps:
@@ -216,28 +242,44 @@ def train_model(args, defaults: dict = None):
 
         # Validation
         model.eval()
-        val_loss = 0.0
+        val_loss_sum = 0.0
         val_correct = 0
         val_total = 0
+        val_total_all = 0
+        val_correct_all = 0
         val_steps = 0
 
         print(f"\nValidating Epoch {epoch}...")
 
+        val_pbar = tqdm(val_loader, desc=f"Epoch {epoch} [Val]")
         with torch.no_grad():
-            for batch in tqdm(val_loader, desc=f"Epoch {epoch} [Val]"):
-                game_type = batch["game_type"].to(device)
-                declarer = batch["declarer"].to(device)
-                is_ouvert = batch["is_ouvert"].to(device)
-                hand = batch["hand"].to(device)
-                hand_len = batch["hand_len"].to(device)
-                ouvert_hand = batch["ouvert_hand"].to(device)
-                ouvert_hand_len = batch["ouvert_hand_len"].to(device)
-                history = batch["history"].to(device)
-                history_len = batch["history_len"].to(device)
-                trick = batch["trick"].to(device)
-                trick_len = batch["trick_len"].to(device)
-                legal_mask = batch["legal_mask"].to(device)
-                targets = batch["target"].to(device)
+            for batch in val_pbar:
+                num_legal = batch["num_legal"].to(device)
+
+                # Track all samples (forced plays are 100% correct with 0 loss)
+                batch_size = num_legal.size(0)
+                num_forced = (num_legal == 1).sum().item()
+                val_total_all += batch_size
+                val_correct_all += num_forced  # Forced plays always correct
+
+                # Filter to multi-choice samples only
+                mask = num_legal > 1
+                if mask.sum() == 0:
+                    continue  # Skip batch if all forced plays
+
+                game_type = batch["game_type"].to(device)[mask]
+                declarer = batch["declarer"].to(device)[mask]
+                is_ouvert = batch["is_ouvert"].to(device)[mask]
+                hand = batch["hand"].to(device)[mask]
+                hand_len = batch["hand_len"].to(device)[mask]
+                ouvert_hand = batch["ouvert_hand"].to(device)[mask]
+                ouvert_hand_len = batch["ouvert_hand_len"].to(device)[mask]
+                history = batch["history"].to(device)[mask]
+                history_len = batch["history_len"].to(device)[mask]
+                trick = batch["trick"].to(device)[mask]
+                trick_len = batch["trick_len"].to(device)[mask]
+                legal_mask = batch["legal_mask"].to(device)[mask]
+                targets = batch["target"].to(device)[mask]
 
                 with torch.autocast(device_type=device.type, enabled=use_amp):
                     outputs = model(
@@ -256,11 +298,24 @@ def train_model(args, defaults: dict = None):
                     )
                     loss = criterion(outputs, targets)
 
-                val_loss += loss.item()
                 _, predicted = outputs.max(1)
-                val_total += targets.size(0)
-                val_correct += predicted.eq(targets).sum().item()
+                num_correct = predicted.eq(targets).sum().item()
+                num_filtered = targets.size(0)
+
+                val_loss_sum += loss.item() * num_filtered
+                val_total += num_filtered
+                val_correct += num_correct
+                val_correct_all += num_correct
+
                 val_steps += 1
+
+                if val_steps % 50 == 0:
+                    acc = 100.0 * val_correct / val_total if val_total > 0 else 0
+                    acc_all = 100.0 * val_correct_all / val_total_all if val_total_all > 0 else 0
+                    val_pbar.set_postfix({
+                        "acc": f"{acc:.2f}%",
+                        "acc_all": f"{acc_all:.2f}%",
+                    })
 
                 if args.max_steps > 0 and val_steps >= (args.max_steps // 10):
                     break
@@ -268,19 +323,33 @@ def train_model(args, defaults: dict = None):
         if device.type == "cuda":
             torch.cuda.empty_cache()
 
+        # Filtered metrics (primary - multi-choice only)
+        avg_val_loss = val_loss_sum / val_total if val_total > 0 else 0
         val_acc = 100.0 * val_correct / val_total if val_total > 0 else 0
-        avg_val_loss = val_loss / val_steps if val_steps > 0 else 0
-        avg_train_loss = train_loss / steps
-        train_acc = 100.0 * train_correct / train_total
+
+        # All samples metrics (for comparison to old runs)
+        avg_val_loss_all = val_loss_sum / val_total_all if val_total_all > 0 else 0
+        val_acc_all = 100.0 * val_correct_all / val_total_all if val_total_all > 0 else 0
+
+        avg_train_loss = train_loss_sum / train_total if train_total > 0 else 0
+        avg_train_loss_all = train_loss_sum / train_total_all if train_total_all > 0 else 0
+        train_acc = 100.0 * train_correct / train_total if train_total > 0 else 0
+        train_acc_all = 100.0 * train_correct_all / train_total_all if train_total_all > 0 else 0
 
         print(f"Epoch {epoch} Results:")
-        print(f"  Train Loss: {avg_train_loss:.4f} | Train Acc: {train_acc:.2f}%")
-        print(f"  Val Loss:   {avg_val_loss:.4f} | Val Acc:   {val_acc:.2f}%")
+        print(f"  Train Loss: {avg_train_loss:.4f} | Train Acc: {train_acc:.2f}% (filtered)")
+        print(f"  Train All:  {avg_train_loss_all:.4f} | Train Acc: {train_acc_all:.2f}% (all samples)")
+        print(f"  Val Loss:   {avg_val_loss:.4f} | Val Acc:   {val_acc:.2f}% (filtered)")
+        print(f"  Val All:    {avg_val_loss_all:.4f} | Val Acc:   {val_acc_all:.2f}% (all samples)")
 
         writer.add_scalar("Loss/train", avg_train_loss, epoch)
+        writer.add_scalar("Loss/train_all", avg_train_loss_all, epoch)
         writer.add_scalar("Loss/val", avg_val_loss, epoch)
+        writer.add_scalar("Loss/val_all", avg_val_loss_all, epoch)
         writer.add_scalar("Accuracy/train", train_acc, epoch)
+        writer.add_scalar("Accuracy/train_all", train_acc_all, epoch)
         writer.add_scalar("Accuracy/val", val_acc, epoch)
+        writer.add_scalar("Accuracy/val_all", val_acc_all, epoch)
         writer.add_scalar("LearningRate", scheduler.get_last_lr()[0], epoch)
 
         if avg_val_loss < best_val_loss:

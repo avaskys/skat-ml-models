@@ -194,6 +194,7 @@ def resume_from_checkpoint(
     optimizer: optim.Optimizer,
     scheduler: optim.lr_scheduler.LRScheduler,
     checkpoint_path: Path,
+    new_lr: float | None = None,
 ) -> tuple[int, float, int]:
     """Resume training state from a checkpoint.
 
@@ -203,6 +204,7 @@ def resume_from_checkpoint(
         optimizer: Optimizer to load state into
         scheduler: Scheduler to load state into
         checkpoint_path: Path to checkpoint (for logging)
+        new_lr: If provided, override the optimizer's learning rate
 
     Returns:
         Tuple of (start_epoch, best_val_loss, global_step)
@@ -212,6 +214,19 @@ def resume_from_checkpoint(
     load_model_state(model, checkpoint)
     load_optimizer_state(optimizer, checkpoint)
     load_scheduler_state(scheduler, checkpoint)
+
+    # Check if LR is being overridden
+    old_lr = optimizer.param_groups[0]["lr"]
+    lr_changed = new_lr is not None and abs(old_lr - new_lr) > 1e-9
+
+    if lr_changed:
+        # Override LR in optimizer
+        for param_group in optimizer.param_groups:
+            param_group["lr"] = new_lr
+            param_group["initial_lr"] = new_lr
+        # Update scheduler base_lrs so get_last_lr() returns correct value
+        scheduler.base_lrs = [new_lr for _ in scheduler.base_lrs]
+        print(f"  LR overridden: {old_lr} -> {new_lr}")
 
     start_epoch = checkpoint["epoch"] + 1
     best_val_loss = checkpoint.get("best_val_loss", float("inf"))

@@ -20,6 +20,69 @@ from ..constants import (
 from .sgf_parser import GameRecord, PassedGameError, PenaltyGameError, parse_sgf_line
 
 
+def _get_follow_suit(card_idx: int, game_type: str) -> str:
+    """
+    Determine the suit a card belongs to for following purposes.
+    Returns: 'TRUMP', 'C', 'S', 'H', or 'D'
+    """
+    is_jack = card_idx < 4
+
+    if game_type == "NULL":
+        # No trump. Jacks belong to printed suits.
+        if is_jack:
+            return ["C", "S", "H", "D"][card_idx]
+        if 4 <= card_idx <= 10:
+            return "C"
+        elif 11 <= card_idx <= 17:
+            return "S"
+        elif 18 <= card_idx <= 24:
+            return "H"
+        else:
+            return "D"
+
+    if game_type == "GRAND":
+        if is_jack:
+            return "TRUMP"
+        if 4 <= card_idx <= 10:
+            return "C"
+        elif 11 <= card_idx <= 17:
+            return "S"
+        elif 18 <= card_idx <= 24:
+            return "H"
+        else:
+            return "D"
+
+    # Suit game (CLUBS, SPADES, HEARTS, DIAMONDS)
+    trump_letter = game_type[0]
+
+    if is_jack:
+        return "TRUMP"
+
+    if 4 <= card_idx <= 10:
+        card_suit = "C"
+    elif 11 <= card_idx <= 17:
+        card_suit = "S"
+    elif 18 <= card_idx <= 24:
+        card_suit = "H"
+    else:
+        card_suit = "D"
+
+    return "TRUMP" if card_suit == trump_letter else card_suit
+
+
+def _get_legal_cards(hand: set, trick_list: list, game_type: str) -> set:
+    """Compute legal cards based on Skat suit-following rules."""
+    if len(trick_list) == 0:
+        return hand  # Leading: any card legal
+
+    led_card_idx = trick_list[0][1]
+    led_suit = _get_follow_suit(led_card_idx, game_type)
+
+    matching = {c for c in hand if _get_follow_suit(c, game_type) == led_suit}
+
+    return matching if matching else hand
+
+
 class FastCardPlayDataset(IterableDataset):
     """
     Optimized streaming dataset for CardPlayPolicy and CardPlayTransformer training.
@@ -65,20 +128,24 @@ class FastCardPlayDataset(IterableDataset):
             start_pos = 0
             end_pos = float("inf")
 
-        # Shuffle buffer
-        buffer = []
+        # Optional shuffle buffer
+        if self.shuffle_buffer <= 0:
+            # No shuffling - yield directly
+            for sample in self._stream_samples(start_pos, end_pos):
+                yield sample
+        else:
+            buffer = []
+            for sample in self._stream_samples(start_pos, end_pos):
+                if len(buffer) < self.shuffle_buffer:
+                    buffer.append(sample)
+                else:
+                    idx = random.randrange(self.shuffle_buffer)
+                    yield buffer[idx]
+                    buffer[idx] = sample
 
-        for sample in self._stream_samples(start_pos, end_pos):
-            if len(buffer) < self.shuffle_buffer:
-                buffer.append(sample)
-            else:
-                idx = random.randrange(self.shuffle_buffer)
-                yield buffer[idx]
-                buffer[idx] = sample
-
-        random.shuffle(buffer)
-        for sample in buffer:
-            yield sample
+            random.shuffle(buffer)
+            for sample in buffer:
+                yield sample
 
     def _stream_samples(
         self, start_pos: int, end_pos: float
@@ -203,9 +270,14 @@ class FastCardPlayDataset(IterableDataset):
                     trick_arr[i, 0] = rel_p
                     trick_arr[i, 1] = c
 
-                # Legal mask
+                # Compute legal moves with proper suit-following
+                legal_cards = _get_legal_cards(
+                    hands[current_player], trick_list, game.game_type
+                )
+
+                # Legal mask using computed legal cards
                 legal_mask = np.zeros(32, dtype=np.float32)
-                for c in hands[current_player]:
+                for c in legal_cards:
                     legal_mask[c] = 1.0
 
                 # Ouvert hand: declarer's visible cards for defenders
@@ -230,6 +302,7 @@ class FastCardPlayDataset(IterableDataset):
                     "trick_len": trick_len,
                     "legal_mask": legal_mask,
                     "target": card_idx,
+                    "num_legal": len(legal_cards),
                 }
 
             # Update state
@@ -314,4 +387,5 @@ def card_play_collate_fn(batch: list) -> dict:
         "trick_len": torch.tensor([s["trick_len"] for s in batch], dtype=torch.long),
         "legal_mask": torch.from_numpy(np.stack([s["legal_mask"] for s in batch])).bool(),
         "target": torch.tensor([s["target"] for s in batch], dtype=torch.long),
+        "num_legal": torch.tensor([s["num_legal"] for s in batch], dtype=torch.long),
     }

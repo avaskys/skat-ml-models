@@ -41,19 +41,17 @@ class BiddingEvaluator(nn.Module):
         # Residual blocks
         self.blocks = nn.ModuleList([ResBlock(hidden_dim) for _ in range(num_blocks)])
 
-        # Heads
+        # Heads - output logits (no sigmoid) for AMP-safe training
         self.pickup_head = nn.Sequential(
             nn.Linear(hidden_dim, 128),
             nn.ReLU(),
             nn.Linear(128, num_thresholds),
-            nn.Sigmoid(),
         )
 
         self.hand_head = nn.Sequential(
             nn.Linear(hidden_dim, 128),
             nn.ReLU(),
             nn.Linear(128, num_thresholds),
-            nn.Sigmoid(),
         )
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -117,21 +115,20 @@ class BiddingTransformer(nn.Module):
         # Output heads
         self.output_norm = nn.LayerNorm(d_model)
 
-        # Separate heads for pickup and hand (d_model*2 = CLS + position)
+        # Separate heads for pickup and hand (position is now added before transformer)
+        # Output logits (no sigmoid) for AMP-safe training with BCEWithLogitsLoss
         self.pickup_head = nn.Sequential(
-            nn.Linear(d_model * 2, d_model),
+            nn.Linear(d_model, d_model),
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(d_model, NUM_BID_LEVELS),
-            nn.Sigmoid(),
         )
 
         self.hand_head = nn.Sequential(
-            nn.Linear(d_model * 2, d_model),
+            nn.Linear(d_model, d_model),
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(d_model, NUM_BID_LEVELS),
-            nn.Sigmoid(),
         )
 
         # Initialize weights
@@ -151,13 +148,19 @@ class BiddingTransformer(nn.Module):
             position: (batch,) position indices (0-2)
 
         Returns:
-            pickup_probs: (batch, 63) win probability at each bid level for pickup
-            hand_probs: (batch, 63) win probability at each bid level for hand game
+            pickup_logits: (batch, 63) logits for win probability at each bid level for pickup
+            hand_logits: (batch, 63) logits for win probability at each bid level for hand game
+
+        Note: Apply torch.sigmoid() to convert logits to probabilities for inference.
         """
         batch_size = hand_cards.size(0)
 
         # Embed cards
         card_emb = self.card_embed(hand_cards)  # (batch, 10, d_model)
+
+        # Add position embedding to all card embeddings (broadcast)
+        pos_emb = self.position_embed(position).unsqueeze(1)  # (batch, 1, d_model)
+        card_emb = card_emb + pos_emb  # (batch, 10, d_model)
 
         # Add CLS token
         cls = self.cls_token.expand(batch_size, -1, -1)  # (batch, 1, d_model)
@@ -170,12 +173,8 @@ class BiddingTransformer(nn.Module):
         cls_output = x[:, 0]  # (batch, d_model)
         cls_output = self.output_norm(cls_output)
 
-        # Embed position and concatenate
-        pos_emb = self.position_embed(position)  # (batch, d_model)
-        combined = torch.cat([cls_output, pos_emb], dim=1)  # (batch, d_model*2)
-
         # Predict probabilities for each bid level
-        pickup_probs = self.pickup_head(combined)  # (batch, 63)
-        hand_probs = self.hand_head(combined)  # (batch, 63)
+        pickup_probs = self.pickup_head(cls_output)  # (batch, 63)
+        hand_probs = self.hand_head(cls_output)  # (batch, 63)
 
         return pickup_probs, hand_probs

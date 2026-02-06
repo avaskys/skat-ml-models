@@ -39,11 +39,11 @@ class GameEvaluator(nn.Module):
 
         self.blocks = nn.ModuleList([ResBlock(hidden_dim) for _ in range(num_blocks)])
 
+        # Output logits (no sigmoid) for AMP-safe training
         self.output_head = nn.Sequential(
             nn.Linear(hidden_dim, 128),
             nn.ReLU(),
             nn.Linear(128, 1),
-            nn.Sigmoid(),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -116,14 +116,13 @@ class GameEvaluatorTransformer(nn.Module):
         )
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers)
 
-        # Output head
+        # Output head - logits (no sigmoid) for AMP-safe training
         self.output_norm = nn.LayerNorm(d_model)
         self.output_head = nn.Sequential(
             nn.Linear(d_model, d_model),
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(d_model, 1),
-            nn.Sigmoid(),
         )
 
         # Initialize weights
@@ -160,7 +159,9 @@ class GameEvaluatorTransformer(nn.Module):
             bid: (batch,) float - normalized bid value (0-1)
 
         Returns:
-            win_prob: (batch,) float - predicted win probability
+            win_logit: (batch,) float - logit for win probability
+
+        Note: Apply torch.sigmoid() to convert to probability for inference.
         """
         batch_size = hand_cards.size(0)
         device = hand_cards.device

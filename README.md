@@ -178,6 +178,69 @@ Training logs are written to TensorBoard:
 tensorboard --logdir models/runs/
 ```
 
+### Remote Training (GPU Server)
+
+For training on a remote machine with a GPU, use the setup script to sync your local code:
+
+```bash
+# Initial setup: sync code, create venv, download data
+./scripts/setup_remote.sh user@gpu-server
+
+# With custom remote directory
+./scripts/setup_remote.sh user@gpu-server --dir /data/skat-ml
+
+# After making local changes, sync code only (faster)
+./scripts/setup_remote.sh user@gpu-server --sync-only
+```
+
+The setup script will:
+1. Sync your local code to the remote machine (via rsync)
+2. Create a Python virtual environment
+3. Install dependencies
+4. Download training data directly from ISS (~9M games)
+
+**Setup script options:**
+
+| Option | Description |
+|--------|-------------|
+| `--dir DIR` | Remote directory (default: ~/skat-ml-models) |
+| `--python CMD` | Python command on remote (default: python3) |
+| `--sync-only` | Only sync code, skip setup (for iterating) |
+| `--skip-data` | Skip downloading training data |
+
+**Start training on remote:**
+
+```bash
+ssh user@gpu-server
+cd ~/skat-ml-models
+source venv/bin/activate
+
+# Train with GPU optimizations
+python scripts/train_bidding.py --sgf data/iss-games.sgf --model transformer \
+    --epochs 20 --amp --compile --batch-size 2048
+```
+
+**Monitor remotely via TensorBoard:**
+
+```bash
+# On remote server
+tensorboard --logdir models/runs/ --bind_all --port 6006
+
+# Access from local machine
+# Open http://gpu-server:6006 in browser
+# Or use SSH tunnel: ssh -L 6006:localhost:6006 user@gpu-server
+```
+
+**Copy trained models back:**
+
+```bash
+# Copy specific run
+scp -r user@gpu-server:~/skat-ml-models/models/runs/my_run ./models/runs/
+
+# Copy all runs
+rsync -avz user@gpu-server:~/skat-ml-models/models/runs/ ./models/runs/
+```
+
 ## Exporting to ONNX
 
 Export trained models for Java inference:

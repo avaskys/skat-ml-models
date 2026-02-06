@@ -146,6 +146,10 @@ class CardPlayTransformer(nn.Module):
         # Position embeddings
         self.position_embed = nn.Embedding(max_seq_len, d_model)
 
+        # Projection layer for (player, card) pairs - concatenate then project
+        # Shared for both history and trick moves (same semantics)
+        self.move_proj = nn.Linear(d_model * 2, d_model)
+
         # Learnable CLS token
         self.cls_token = nn.Parameter(torch.randn(1, 1, d_model))
 
@@ -183,6 +187,8 @@ class CardPlayTransformer(nn.Module):
         nn.init.normal_(self.segment_embed.weight, std=0.02)
         nn.init.normal_(self.position_embed.weight, std=0.02)
         nn.init.normal_(self.cls_token, std=0.02)
+        nn.init.xavier_uniform_(self.move_proj.weight)
+        nn.init.zeros_(self.move_proj.bias)
 
     def forward(
         self,
@@ -272,10 +278,10 @@ class CardPlayTransformer(nn.Module):
             )
         )
 
-        # 7. History moves (player + card combined via addition)
+        # 7. History moves (player + card combined via learned projection)
         hist_player_emb = self.player_embed(history[:, :, 0])
         hist_card_emb = self.card_embed(history[:, :, 1])
-        hist_emb = hist_player_emb + hist_card_emb
+        hist_emb = self.move_proj(torch.cat([hist_player_emb, hist_card_emb], dim=-1))
         embeddings.append(hist_emb)
         segments.append(
             torch.full(
@@ -286,10 +292,10 @@ class CardPlayTransformer(nn.Module):
             )
         )
 
-        # 8. Current trick cards
+        # 8. Current trick cards (same projection as history)
         trick_player_emb = self.player_embed(trick[:, :, 0])
         trick_card_emb = self.card_embed(trick[:, :, 1])
-        trick_emb = trick_player_emb + trick_card_emb
+        trick_emb = self.move_proj(torch.cat([trick_player_emb, trick_card_emb], dim=-1))
         embeddings.append(trick_emb)
         segments.append(
             torch.full(

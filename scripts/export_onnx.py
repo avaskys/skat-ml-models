@@ -34,6 +34,8 @@ from skat_ml.constants import (
     MAX_SKAT,
     MAX_TRICK,
 )
+import torch.nn as nn
+
 from skat_ml.models import (
     BiddingEvaluator,
     BiddingTransformer,
@@ -43,6 +45,51 @@ from skat_ml.models import (
     GameEvaluatorTransformer,
 )
 from skat_ml.training_utils import strip_compiled_prefix
+
+
+# Wrapper classes for ONNX export that apply sigmoid to convert logits to probabilities
+class BiddingEvaluatorExport(nn.Module):
+    """Wrapper that applies sigmoid for ONNX export."""
+    def __init__(self, model: BiddingEvaluator):
+        super().__init__()
+        self.model = model
+
+    def forward(self, x):
+        pickup_logits, hand_logits = self.model(x)
+        return torch.sigmoid(pickup_logits), torch.sigmoid(hand_logits)
+
+
+class BiddingTransformerExport(nn.Module):
+    """Wrapper that applies sigmoid for ONNX export."""
+    def __init__(self, model: BiddingTransformer):
+        super().__init__()
+        self.model = model
+
+    def forward(self, hand_cards, position):
+        pickup_logits, hand_logits = self.model(hand_cards, position)
+        return torch.sigmoid(pickup_logits), torch.sigmoid(hand_logits)
+
+
+class GameEvaluatorExport(nn.Module):
+    """Wrapper that applies sigmoid for ONNX export."""
+    def __init__(self, model: GameEvaluator):
+        super().__init__()
+        self.model = model
+
+    def forward(self, x):
+        logits = self.model(x)
+        return torch.sigmoid(logits)
+
+
+class GameEvaluatorTransformerExport(nn.Module):
+    """Wrapper that applies sigmoid for ONNX export."""
+    def __init__(self, model: GameEvaluatorTransformer):
+        super().__init__()
+        self.model = model
+
+    def forward(self, hand_cards, skat_cards, skat_len, game_type, position, is_hand, bid):
+        logits = self.model(hand_cards, skat_cards, skat_len, game_type, position, is_hand, bid)
+        return torch.sigmoid(logits)
 
 
 def load_checkpoint_and_config(checkpoint_path: Path) -> tuple[dict, dict]:
@@ -86,11 +133,15 @@ def export_bidding(checkpoint_path: Path, output_dir: Path):
         model.load_state_dict(state_dict)
         model.eval()
 
+        # Wrap with sigmoid for export (model outputs logits)
+        export_model = BiddingEvaluatorExport(model)
+        export_model.eval()
+
         dummy_input = torch.randn(1, BIDDING_EVALUATOR_INPUT_DIM)
         onnx_path = output_dir / "bidding_dense.onnx"
 
         torch.onnx.export(
-            model,
+            export_model,
             dummy_input,
             str(onnx_path),
             input_names=["features"],
@@ -108,12 +159,16 @@ def export_bidding(checkpoint_path: Path, output_dir: Path):
         model.load_state_dict(state_dict)
         model.eval()
 
+        # Wrap with sigmoid for export (model outputs logits)
+        export_model = BiddingTransformerExport(model)
+        export_model.eval()
+
         dummy_hand = torch.zeros(1, 10, dtype=torch.long)
         dummy_position = torch.zeros(1, dtype=torch.long)
         onnx_path = output_dir / "bidding_transformer.onnx"
 
         torch.onnx.export(
-            model,
+            export_model,
             (dummy_hand, dummy_position),
             str(onnx_path),
             input_names=["hand_cards", "position"],
@@ -145,11 +200,15 @@ def export_game_eval(checkpoint_path: Path, output_dir: Path):
         model.load_state_dict(state_dict)
         model.eval()
 
+        # Wrap with sigmoid for export (model outputs logits)
+        export_model = GameEvaluatorExport(model)
+        export_model.eval()
+
         dummy_input = torch.randn(1, GAME_EVALUATOR_INPUT_DIM)
         onnx_path = output_dir / "game_eval_dense.onnx"
 
         torch.onnx.export(
-            model,
+            export_model,
             dummy_input,
             str(onnx_path),
             input_names=["features"],
@@ -167,6 +226,10 @@ def export_game_eval(checkpoint_path: Path, output_dir: Path):
         model.load_state_dict(state_dict)
         model.eval()
 
+        # Wrap with sigmoid for export (model outputs logits)
+        export_model = GameEvaluatorTransformerExport(model)
+        export_model.eval()
+
         dummy_hand = torch.zeros(1, MAX_HAND, dtype=torch.long)
         dummy_skat = torch.full((1, MAX_SKAT), CARD_PAD_IDX, dtype=torch.long)
         dummy_skat_len = torch.zeros(1, dtype=torch.long)
@@ -178,7 +241,7 @@ def export_game_eval(checkpoint_path: Path, output_dir: Path):
         onnx_path = output_dir / "game_eval_transformer.onnx"
 
         torch.onnx.export(
-            model,
+            export_model,
             (dummy_hand, dummy_skat, dummy_skat_len, dummy_game_type, dummy_position, dummy_is_hand, dummy_bid),
             str(onnx_path),
             input_names=["hand_cards", "skat_cards", "skat_len", "game_type", "position", "is_hand", "bid"],
